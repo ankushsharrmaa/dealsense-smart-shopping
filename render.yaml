@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: dealsense-smart-shopping
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/status
+    envVars:
+      - key: REWALTO_API_KEY
+        sync: false
