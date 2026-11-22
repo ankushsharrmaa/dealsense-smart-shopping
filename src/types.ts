@@ -13,7 +13,7 @@ export interface PriceObservation {
 
 export interface Product {
   id: string;
-  source: "demo" | "rewalto";
+  source: "demo" | "rewalto" | "scrapingdog";
   title: string;
   brand: string | null;
   retailer: string;
@@ -33,6 +33,8 @@ export interface ApiStatus {
   configured: boolean;
   provider: string;
   supportedRetailers: string[];
+  rewaltoConfigured: boolean;
+  scrapingdogConfigured: boolean;
 }
 
 export interface CatalogPage {

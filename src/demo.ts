@@ -1,6 +1,6 @@
 import type { Product, PriceObservation } from "./types";
 
-function observations(prices: number[]): PriceObservation[] {
+function observations(prices: number[], mrp: number): PriceObservation[] {
   return prices.map((price, index) => {
     const observed = new Date();
     observed.setDate(observed.getDate() - (prices.length - index - 1) * 4);
@@ -8,7 +8,7 @@ function observations(prices: number[]): PriceObservation[] {
       id: `demo-${index}`,
       observedAt: observed.toISOString(),
       priceMinor: price * 100,
-      mrpMinor: 12999 * 100,
+      mrpMinor: mrp * 100,
       currency: "INR",
       inStock: true,
     };
@@ -31,7 +31,7 @@ export const demoProducts: Product[] = [
     currency: "INR",
     inStock: true,
     observedAt: new Date().toISOString(),
-    observations: observations([8999, 7999, 8499, 7299, 6999, 7499, 6499, 6499]),
+    observations: observations([8999, 7999, 8499, 7299, 6999, 7499, 6499, 6499], 9999),
   },
   {
     id: "demo-wireless-headphones",
@@ -48,7 +48,7 @@ export const demoProducts: Product[] = [
     currency: "INR",
     inStock: true,
     observedAt: new Date().toISOString(),
-    observations: observations([6999, 6499, 5999, 6499, 5799, 5499, 5699, 5299]),
+    observations: observations([6999, 6499, 5999, 6499, 5799, 5499, 5699, 5299], 7999),
   },
   {
     id: "demo-carryall-tote",
@@ -65,6 +65,91 @@ export const demoProducts: Product[] = [
     currency: "INR",
     inStock: true,
     observedAt: new Date().toISOString(),
-    observations: observations([2499, 2399, 2299, 2499, 2199, 2299, 2199, 2199]),
+    observations: observations([2499, 2399, 2299, 2499, 2199, 2299, 2199, 2199], 3499),
+  },
+  {
+    id: "demo-pulse-smartwatch",
+    source: "demo",
+    title: "Pulse Active Smartwatch",
+    brand: "Peakline",
+    retailer: "Flipkart",
+    retailerSku: "DEMO-4176",
+    imageUrl:
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=85",
+    productUrl: null,
+    priceMinor: 279900,
+    mrpMinor: 499900,
+    currency: "INR",
+    inStock: true,
+    observedAt: new Date().toISOString(),
+    observations: observations([3499, 3299, 3099, 3199, 2899, 2999, 2799, 2799], 4999),
+  },
+  {
+    id: "demo-novaglow-lamp",
+    source: "demo",
+    title: "NovaGlow Desk Lamp",
+    brand: "LumaNest",
+    retailer: "Amazon",
+    retailerSku: "DEMO-5284",
+    imageUrl:
+      "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=85",
+    productUrl: null,
+    priceMinor: 169900,
+    mrpMinor: 249900,
+    currency: "INR",
+    inStock: true,
+    observedAt: new Date().toISOString(),
+    observations: observations([2199, 1999, 1899, 2099, 1799, 1899, 1699, 1699], 2499),
+  },
+  {
+    id: "demo-citytrail-daypack",
+    source: "demo",
+    title: "CityTrail Everyday Daypack",
+    brand: "Wayfinder",
+    retailer: "Myntra",
+    retailerSku: "DEMO-6391",
+    imageUrl:
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=85",
+    productUrl: null,
+    priceMinor: 189900,
+    mrpMinor: 299900,
+    currency: "INR",
+    inStock: true,
+    observedAt: new Date().toISOString(),
+    observations: observations([2499, 2299, 2199, 2099, 1999, 2099, 1899, 1899], 2999),
+  },
+  {
+    id: "demo-brewday-coffee-press",
+    source: "demo",
+    title: "Brewday Coffee Press",
+    brand: "Roast & Co.",
+    retailer: "Flipkart",
+    retailerSku: "DEMO-7425",
+    imageUrl:
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=85",
+    productUrl: null,
+    priceMinor: 129900,
+    mrpMinor: 189900,
+    currency: "INR",
+    inStock: true,
+    observedAt: new Date().toISOString(),
+    observations: observations([1599, 1499, 1399, 1499, 1399, 1299, 1299, 1299], 1899),
+  },
+  {
+    id: "demo-airflow-desk-fan",
+    source: "demo",
+    title: "Airflow Compact Desk Fan",
+    brand: "Breeze Lab",
+    retailer: "Amazon",
+    retailerSku: "DEMO-8530",
+    imageUrl:
+      "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=85",
+    productUrl: null,
+    priceMinor: 219900,
+    mrpMinor: 349900,
+    currency: "INR",
+    inStock: true,
+    observedAt: new Date().toISOString(),
+    observations: observations([2799, 2599, 2499, 2399, 2299, 2399, 2199, 2199], 3499),
   },
 ];

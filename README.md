@@ -30,15 +30,21 @@ This integration follows Rewalto's [Myntra listings](https://rewalto.com/develop
 - A Myntra URL must contain a retailer product ID (SKU), or use **Have a Myntra product ID?** to enter it directly.
 - The server calls `GET /v1/data/listings` with `retailer=myntra` and the exact `retailerSku`, then fetches actual `GET /v1/data/observations` records for that SKU.
 - The app does not search by free text, scrape retailer pages, or infer a match from a product name.
-- Rewalto coverage in this prototype is Myntra only. Amazon and Flipkart links are not looked up in Real API Mode.
+- Rewalto coverage in this prototype is Myntra only. Flipkart is handled separately by Scrapingdog; Amazon has no live provider integration.
 - The home page can browse the live Rewalto Myntra catalog in pages of 20. Loading a page costs 1 credit per 10 delivered listings (up to 2 credits per page); rereading the same records within 7 days is free. The app does not load the catalog automatically.
 - Opening one catalog product's history makes a separate listing lookup and observation request. The chart request is capped at the newest 100 observations; observations cost 1 credit per 10 delivered records, and repeated reads within 7 days are free.
 - Empty results, missing observations, invalid credentials, provider limits, and other API failures are reported. The app does not substitute sample values for a failed real lookup.
 - If Rewalto has more than 100 observations for a product, the detail page discloses that the chart only shows the newest 100.
 
+## Real Flipkart data with Scrapingdog
+
+Set `SCRAPINGDOG_API_KEY` in the server's private environment (or in the root `.env` for local development). Never use a `VITE_` variable or put the key in frontend code. Real API Mode routes Flipkart product URLs to Scrapingdog's documented `GET https://api.scrapingdog.com/flipkart/product` endpoint; the key is sent server-side as the documented `api_key` query parameter. See the [Scrapingdog Flipkart Product API docs](https://www.scrapingdog.com/documentation/flipkart-product-api/).
+
+Each successful product request costs 5 Scrapingdog credits. The API provides current product details, not a historical price series. DealSense records the returned price and check time in this browser's local storage, so its chart gains real observations only after subsequent user-requested checks. Those observations are not shared across browsers or devices; the app never invents historical prices or combines them with Rewalto data. A failed request is shown as an error and does not become an observation.
+
 ## Demo Mode
 
-Demo Mode works without an API key. Products and prices are sample data and visibly labeled **DEMO DATA**. Submitting a URL in Demo Mode opens a sample product; it does not fetch or match the submitted URL. Demo observations are not mixed with Rewalto observations.
+Demo Mode works without an API key. Products and prices are sample data and visibly labeled **DEMO DATA**. Submitting a URL in Demo Mode does not fetch or match it; the app asks you to switch to Real API Mode. Open a sample product by selecting one of the sample cards. Demo observations are not mixed with provider observations. When either real provider key is configured and the visitor has not chosen a mode before, the app starts in Real API Mode.
 
 ## Storage and production
 
@@ -49,7 +55,7 @@ npm run build
 npm start
 ```
 
-The server serves `dist/` and the `/api` endpoints. Configure `REWALTO_API_KEY` in the server environment for real data. The production build includes an installable PWA shell; API calls are never cached and price lookups need an internet connection.
+The server serves `dist/` and the `/api` endpoints. Configure `REWALTO_API_KEY` and/or `SCRAPINGDOG_API_KEY` in the server environment for real data. The production build includes an installable PWA shell; API calls are never cached and price lookups need an internet connection.
 
 ## Deploy and share on WhatsApp
 
@@ -57,11 +63,11 @@ The local address (`localhost`) only works on your computer. To make a link that
 
 1. Create a private GitHub repository and upload this project. Do not upload `.env`; it is excluded by `.gitignore`.
 2. Create a web service on Render from that repository and use the included `render.yaml` settings (build: `npm install && npm run build`; start: `npm start`).
-3. In the Render service's Environment settings, add `REWALTO_API_KEY` as a secret value. Never put it in `VITE_` variables or source files.
+3. In the Render service's Environment settings, add `REWALTO_API_KEY` and/or `SCRAPINGDOG_API_KEY` as secret values. Never put them in `VITE_` variables or source files.
 4. After the service deploys, open its HTTPS URL and use the **Share** button to send it through WhatsApp.
 5. To install on Android, open that HTTPS link in Chrome, open the three-dot menu, and choose **Install app** or **Add to Home screen**. On iPhone, open the link in Safari, tap **Share**, then **Add to Home Screen**.
 
-The app's Share button intentionally will not share a `localhost` link. Publishing the site requires your own hosting account; this project does not upload your code or API key to a hosting provider.
+The app's Share button intentionally will not share a `localhost` link. Publishing the site requires your own hosting account; this project does not upload your code or API key to a hosting provider. Add `SCRAPINGDOG_API_KEY` as a private environment variable in Render to enable Flipkart requests there; each successful request costs 5 credits.
 
 ## Checks
 

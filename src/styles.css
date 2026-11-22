@@ -132,6 +132,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .secondary-button { border-color: #e9eaf1; color: #5e6379; background: white; }
 .secondary-button:hover { border-color: #d8d1fa; color: #624cc5; background: #fbfaff; }
 .form-error { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: #c35b56; font-size: 11px; line-height: 1.5; }
+.demo-search-warning { align-items: flex-start; color: #907747; }
+.demo-search-warning > svg { flex: 0 0 auto; color: #ab8b4e; }
+.demo-search-warning > span { flex: 1; }
+.demo-search-warning button { flex: 0 0 auto; padding: 5px 8px; border: 1px solid #e8dcc1; border-radius: 6px; color: #7a6234; background: #fffcf5; font-size: 9px; font-weight: 700; }
+.demo-search-warning button:hover { border-color: #d7c49b; background: #fff8e9; }
 .demo-search-note, .real-search-note { display: flex; align-items: center; gap: 6px; margin-top: 9px; color: #898da1; font-size: 10px; }
 .demo-search-note svg { flex: 0 0 auto; color: #8c78de; }
 .real-search-note svg { color: #6b9f8c; }

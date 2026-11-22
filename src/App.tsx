@@ -49,7 +49,7 @@ type Screen = AppPage | "product";
 
 const trackedStorageKey = "dealsense.tracked.v1";
 const recentStorageKey = "dealsense.recent.v1";
-const modeStorageKey = "dealsense.mode.v1";
+const modeStorageKey = "dealsense.mode.v2";
 const currentStorageKey = "dealsense.current.v1";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,7 +72,7 @@ function isProduct(value: unknown): value is Product {
   if (!isRecord(value)) return false;
   return (
     typeof value.id === "string" &&
-    (value.source === "demo" || value.source === "rewalto") &&
+    (value.source === "demo" || value.source === "rewalto" || value.source === "scrapingdog") &&
     typeof value.title === "string" &&
     (value.brand === null || typeof value.brand === "string") &&
     typeof value.retailer === "string" &&
@@ -157,11 +157,10 @@ function ProductImage({ product, className = "" }: { product: Product; className
 }
 
 function SourceBadge({ source }: { source: Product["source"] }) {
-  return source === "demo" ? (
-    <span className="source-badge demo-badge"><Sparkles size={12} /> DEMO DATA</span>
-  ) : (
-    <span className="source-badge real-badge"><ShieldCheck size={12} /> REWALTO DATA</span>
-  );
+  if (source === "demo") {
+    return <span className="source-badge demo-badge"><Sparkles size={12} /> DEMO DATA</span>;
+  }
+  return <span className="source-badge real-badge"><ShieldCheck size={12} /> {source === "rewalto" ? "REWALTO DATA" : "SCRAPINGDOG DATA"}</span>;
 }
 
 function getPriceRecommendation(product: Product) {
@@ -447,6 +446,9 @@ function ProductDetail({
       {product.source === "rewalto" && prices.length === 0 && (
         <div className="inline-note"><Info size={15} /> Rewalto found this listing, but did not return usable price observations. No history has been estimated.</div>
       )}
+      {product.source === "scrapingdog" && (
+        <div className="inline-note"><Info size={15} /> Scrapingdog provides a current product scrape, not historical prices. This chart contains only successful price checks saved in this browser; each new Flipkart check costs 5 Scrapingdog credits.</div>
+      )}
     </div>
   );
 }
@@ -467,6 +469,7 @@ function Sidebar({
   onClose: () => void;
 }) {
   const isActive = (page: AppPage) => screen === page || (page === "home" && screen === "product");
+  const providerConfigured = Boolean(apiStatus?.rewaltoConfigured || apiStatus?.scrapingdogConfigured);
   return (
     <>
       {mobileOpen && <button className="sidebar-backdrop" onClick={onClose} aria-label="Close navigation" />}
@@ -492,8 +495,8 @@ function Sidebar({
         </nav>
         <div className="sidebar-spacer" />
         <div className="data-connection-card">
-          <div className="connection-top"><span className={`connection-dot ${apiStatus?.configured ? "connected" : ""}`} /><span>{mode === "demo" ? "Demo workspace" : apiStatus?.configured ? "API key present" : "Real API mode"}</span><LockKeyhole size={13} /></div>
-          <p>{mode === "demo" ? "Try sample products with clearly labeled demo prices." : apiStatus?.configured ? "A Rewalto key is set; lookup will validate provider access." : "Add your Rewalto key to enable real lookups."}</p>
+          <div className="connection-top"><span className={`connection-dot ${providerConfigured ? "connected" : ""}`} /><span>{mode === "demo" ? "Demo workspace" : providerConfigured ? "API key present" : "Real API mode"}</span><LockKeyhole size={13} /></div>
+          <p>{mode === "demo" ? "Try sample products with clearly labeled demo prices." : providerConfigured ? "At least one real-data provider key is set; lookups validate access." : "Add provider keys to enable real lookups."}</p>
           <button type="button" onClick={() => { onNavigate("settings"); onClose(); }}>Configure data <ArrowRight size={14} /></button>
         </div>
         <div className="sidebar-user">
@@ -540,11 +543,13 @@ function SearchPanel({
   isSearching,
   error,
   onSearch,
+  onSwitchToReal,
 }: {
   mode: DataMode;
   isSearching: boolean;
   error: string;
   onSearch: (url: string) => void;
+  onSwitchToReal: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [showSku, setShowSku] = useState(false);
@@ -577,7 +582,7 @@ function SearchPanel({
         <span className={`search-mode-label ${mode === "demo" ? "demo-mode-label" : ""}`}>{mode === "demo" ? <><Sparkles size={12} /> DEMO MODE</> : <><ShieldCheck size={12} /> REAL DATA</>}</span>
       </div>
       <form className="url-search-form" onSubmit={submitUrl}>
-        <div className={`url-input-wrap ${validation || error ? "input-error" : ""}`}>
+        <div className={`url-input-wrap ${validation || (error && mode === "real") ? "input-error" : ""}`}>
           <Link2 size={18} />
           <input
             aria-label="Product URL"
@@ -593,11 +598,19 @@ function SearchPanel({
           {isSearching ? <><LoaderCircle className="spin" size={17} /> Looking up</> : <><Search size={17} /> Track price</>}
         </button>
       </form>
-      {(validation || error) && <div className="form-error"><Info size={15} /> {validation || error}</div>}
+      {(validation || error) && (
+        <div className={`form-error ${error && mode === "demo" && !validation ? "demo-search-warning" : ""}`}>
+          <Info size={15} />
+          <span>{validation || error}</span>
+          {error && mode === "demo" && !validation && (
+            <button type="button" onClick={onSwitchToReal}>Switch to Real API Mode</button>
+          )}
+        </div>
+      )}
       {mode === "demo" && !error && <div className="demo-search-note"><Info size={14} /> Demo mode does not fetch or match pasted URLs. Results are sample data, clearly labeled.</div>}
-      {mode === "real" && <div className="real-search-note"><LockKeyhole size={13} /> Real lookup currently supports exact Myntra product IDs through Rewalto.</div>}
+      {mode === "real" && <div className="real-search-note"><LockKeyhole size={13} /> Myntra uses Rewalto; Flipkart product checks use Scrapingdog (5 credits per successful request).</div>}
       <div className="search-card-bottom">
-        <div className="retailer-list"><span>Retailers</span><b className="retailer-supported"><i /> Myntra · API</b><b className="retailer-demo">Flipkart · demo</b><b className="retailer-demo">Amazon · demo</b></div>
+        <div className="retailer-list"><span>Retailers</span><b className="retailer-supported"><i /> Myntra · API</b><b className="retailer-supported"><i /> Flipkart · API</b><b className="retailer-demo">Amazon · demo</b></div>
         <button className="sku-link" type="button" onClick={() => setShowSku((value) => !value)}>
           {showSku ? "Hide product ID search" : "Have a Myntra product ID?"} <ArrowRight size={13} />
         </button>
@@ -751,6 +764,7 @@ function HomePage({
   onSearch,
   onSelectProduct,
   onNavigate,
+  onModeChange,
 }: {
   mode: DataMode;
   status: ApiStatus | null;
@@ -760,6 +774,7 @@ function HomePage({
   onSearch: (url: string) => void;
   onSelectProduct: (product: Product) => void;
   onNavigate: (page: AppPage) => void;
+  onModeChange: (mode: DataMode) => void;
 }) {
   return (
     <div className="page-stack">
@@ -775,13 +790,13 @@ function HomePage({
           <div className="decor-card decor-card-front"><div className="decor-card-icon"><TrendingDown size={17} /></div><span>Illustrative price history</span><strong>Price trend</strong><div className="decor-sparkline"><i /><i /><i /><i /><i /><i /><i /><i /></div></div>
         </div>
       </div>
-      {mode === "real" && status && !status.configured && (
-        <div className="setup-callout"><Info size={17} /><div><strong>Real API access needs a key</strong><span>Add <code>REWALTO_API_KEY</code> to your server-side <code>.env</code> file, then restart the app.</span></div><span className="setup-pill">Myntra data only</span></div>
+      {mode === "real" && status && !status.rewaltoConfigured && !status.scrapingdogConfigured && (
+        <div className="setup-callout"><Info size={17} /><div><strong>Real API access needs a key</strong><span>Add <code>REWALTO_API_KEY</code> for Myntra and/or <code>SCRAPINGDOG_API_KEY</code> for Flipkart to the server environment.</span></div><span className="setup-pill">Myntra + Flipkart</span></div>
       )}
       {mode === "real" && statusError && (
         <div className="setup-callout"><Info size={17} /><div><strong>Could not reach the DealSense API server</strong><span>{statusError}</span></div></div>
       )}
-      <SearchPanel mode={mode} isSearching={isSearching} error={error} onSearch={onSearch} />
+      <SearchPanel mode={mode} isSearching={isSearching} error={error} onSearch={onSearch} onSwitchToReal={() => onModeChange("real")} />
       {mode === "real" && status?.configured && <RewaltoCatalog onSelect={onSelectProduct} />}
       <div className="section-heading">
         <div><div className="eyebrow">WHY DEALSENSE</div><h2>A smarter way to shop</h2></div>
@@ -800,8 +815,8 @@ function HomePage({
         <DemoProducts onSelect={onSelectProduct} compact />
         <div className="demo-footer-note"><Info size={14} /> Sample prices and product history are illustrative demo data. They are never presented as live retailer data.</div>
       </section>
-      {mode === "real" && status?.configured && (
-        <div className="provider-footnote"><ShieldCheck size={15} /> Provider: Rewalto · Real product lookups currently cover Myntra only. <a href="https://rewalto.com/developers/docs/api/myntra" target="_blank" rel="noreferrer">API documentation <ExternalLink size={12} /></a></div>
+      {mode === "real" && (status?.rewaltoConfigured || status?.scrapingdogConfigured) && (
+        <div className="provider-footnote"><ShieldCheck size={15} /> Real lookups: Rewalto for Myntra and Scrapingdog for Flipkart. Flipkart history is collected only when you request a check. <a href="https://www.scrapingdog.com/documentation/flipkart-product-api/" target="_blank" rel="noreferrer">Scrapingdog API docs <ExternalLink size={12} /></a></div>
       )}
     </div>
   );
@@ -901,7 +916,7 @@ function SettingsPage({
 }) {
   return (
     <div className="page-stack">
-      <div className="page-title-row"><div><div className="eyebrow">PREFERENCES</div><h1>Settings & API</h1><p>Choose your data source and check your Rewalto connection.</p></div></div>
+      <div className="page-title-row"><div><div className="eyebrow">PREFERENCES</div><h1>Settings & API</h1><p>Choose your data source and check server-side provider configuration.</p></div></div>
       <section className="panel settings-panel">
         <div className="settings-title"><div className="settings-title-icon"><Activity size={18} /></div><div><h2>Data mode</h2><p>Demo data and real API results are kept separate.</p></div></div>
         <div className="mode-choice-grid">
@@ -909,7 +924,7 @@ function SettingsPage({
             <span className="mode-choice-radio">{mode === "demo" && <i />}</span><span className="mode-choice-body"><strong><Sparkles size={17} /> Demo Mode</strong><span>Explore sample product data and illustrative price history. Every sample is labeled DEMO DATA.</span><b className="mode-choice-tag demo-choice-tag">No API key needed</b></span>
           </button>
           <button className={`mode-choice ${mode === "real" ? "selected" : ""}`} type="button" onClick={() => onModeChange("real")}>
-            <span className="mode-choice-radio">{mode === "real" && <i />}</span><span className="mode-choice-body"><strong><ShieldCheck size={17} /> Real API Mode</strong><span>Look up Rewalto's latest Myntra listings and actual price observations.</span><b className="mode-choice-tag real-choice-tag">Requires server API key</b></span>
+            <span className="mode-choice-radio">{mode === "real" && <i />}</span><span className="mode-choice-body"><strong><ShieldCheck size={17} /> Real API Mode</strong><span>Look up Myntra through Rewalto and Flipkart through Scrapingdog.</span><b className="mode-choice-tag real-choice-tag">Requires server API key(s)</b></span>
           </button>
         </div>
       </section>
@@ -922,7 +937,16 @@ function SettingsPage({
         </div>
         <div className="api-config-instructions"><div><strong>Set up your key</strong><span>1. Copy <code>.env.example</code> to <code>.env</code> in the project root.</span><span>2. Set <code>REWALTO_API_KEY=your_key</code> and restart the server.</span><span>3. Keep the key out of frontend variables and source control.</span></div><a href="https://rewalto.com/developers/docs/api/myntra" target="_blank" rel="noreferrer">Rewalto API docs <ExternalLink size={13} /></a></div>
       </section>
-      <section className="panel coverage-panel"><div className="coverage-heading"><div><div className="eyebrow">CURRENT PROVIDER COVERAGE</div><h2>Available in Real API Mode</h2></div><span className="coverage-count">1 retailer</span></div><div className="coverage-retailer"><span className="myntra-logo">M</span><div><strong>Myntra</strong><span>Look up listings by exact retailer SKU and read dated observations.</span></div><span className="coverage-supported"><Check size={13} /> Supported</span></div><div className="coverage-unavailable"><strong>Flipkart & Amazon</strong><span>Not included in this Rewalto integration. They can still be previewed as explicitly labeled sample products in Demo Mode.</span></div></section>
+      <section className="panel settings-panel api-status-panel">
+        <div className="settings-title"><div className="settings-title-icon settings-lock"><LockKeyhole size={18} /></div><div><h2>Scrapingdog Flipkart configuration</h2><p>The API key stays on the server and is sent only to Scrapingdog.</p></div></div>
+        <div className={`api-status-box ${status?.scrapingdogConfigured ? "api-ready" : ""}`}>
+          <div className={`api-status-icon ${status?.scrapingdogConfigured ? "ready" : ""}`}>{status?.scrapingdogConfigured ? <Check size={18} /> : <Info size={18} />}</div>
+          <div><strong>{status?.scrapingdogConfigured ? "API key configured" : statusError ? "API server unavailable" : status ? "API key not configured" : "Checking server setup"}</strong><span>{status?.scrapingdogConfigured ? "A key is present. A real request checks validity and account access." : statusError || (status ? "Add SCRAPINGDOG_API_KEY to the server environment to enable Flipkart lookups." : "Waiting for a response from the DealSense server.")}</span></div>
+          <span className={`api-status-indicator ${status?.scrapingdogConfigured ? "ready" : ""}`}><i />{status?.scrapingdogConfigured ? "Key present" : statusError ? "Unavailable" : status ? "Not configured" : "Checking"}</span>
+        </div>
+        <div className="api-config-instructions"><div><strong>Configure safely</strong><span>Set <code>SCRAPINGDOG_API_KEY</code> in the server's private environment (or root <code>.env</code> for local use).</span><span>Each successful Flipkart product request uses 5 Scrapingdog credits. Never add the key to frontend code or share it in chat.</span></div><a href="https://www.scrapingdog.com/documentation/flipkart-product-api/" target="_blank" rel="noreferrer">Scrapingdog API docs <ExternalLink size={13} /></a></div>
+      </section>
+      <section className="panel coverage-panel"><div className="coverage-heading"><div><div className="eyebrow">CURRENT PROVIDER COVERAGE</div><h2>Available in Real API Mode</h2></div><span className="coverage-count">2 retailers</span></div><div className="coverage-retailer"><span className="myntra-logo">M</span><div><strong>Myntra</strong><span>Rewalto listings and its recorded price observations.</span></div><span className="coverage-supported"><Check size={13} /> Supported</span></div><div className="coverage-retailer"><span className="myntra-logo">F</span><div><strong>Flipkart</strong><span>Current Scrapingdog product checks; history accumulates from checks saved in this browser (5 credits each).</span></div><span className="coverage-supported"><Check size={13} /> Supported</span></div><div className="coverage-unavailable"><strong>Amazon</strong><span>Not connected to a live provider in this prototype; sample products remain clearly labeled in Demo Mode.</span></div></section>
     </div>
   );
 }
@@ -949,9 +973,11 @@ export default function App() {
   const [storageWarning, setStorageWarning] = useState("");
 
   useEffect(() => {
+    let hasSavedMode = false;
     try {
       setTracked(getStored(trackedStorageKey, [], isProductList));
       setRecentProducts(getStored(recentStorageKey, [], isProductList));
+      hasSavedMode = localStorage.getItem(modeStorageKey) !== null;
       setMode(getStored(modeStorageKey, "demo", isMode));
       setCurrentProduct(getStored(currentStorageKey, null, isCurrentProduct));
     } catch (error) {
@@ -961,7 +987,11 @@ export default function App() {
       setStorageReady(true);
     }
     getApiStatus()
-      .then((status) => { setApiStatus(status); setApiStatusError(""); })
+      .then((status) => {
+        setApiStatus(status);
+        setApiStatusError("");
+        if ((status.rewaltoConfigured || status.scrapingdogConfigured) && !hasSavedMode) setMode("real");
+      })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "The DealSense API server could not be reached.";
         console.error("Could not check API status:", message);
@@ -1063,39 +1093,28 @@ export default function App() {
       if (search.startsWith("SKU:")) {
         const sku = search.slice(4);
         if (mode === "demo") {
-          setCurrentProduct(demoProducts[0]);
-          recordRecent(demoProducts[0]);
-          setToast({ tone: "success", message: "Demo sample opened. No live SKU lookup was performed." });
-          navigate("product", demoProducts[0]);
+          setSearchError("Demo Mode is active, so no live lookup was made. Switch to Real API Mode to search this Myntra product ID.");
           return;
         }
         const result = await lookupProduct({ retailerSku: sku });
-        setCurrentProduct(result);
-        recordRecent(result);
-        navigate("product", result);
+        saveLookupResult(result);
         setToast({ tone: "success", message: "Product observations loaded from Rewalto." });
         return;
       }
       const validation = validateProductUrl(search);
       if (validation) throw new Error(validation);
       if (mode === "demo") {
-        const host = new URL(search).hostname.toLowerCase();
-        const sample = host.includes("amazon")
-          ? demoProducts[2]
-          : host.includes("flipkart")
-            ? demoProducts[1]
-            : demoProducts[0];
-        setCurrentProduct(sample);
-        recordRecent(sample);
-        navigate("product", sample);
-        setToast({ tone: "success", message: "Demo sample opened. This sample is not matched to your pasted link." });
+        setSearchError("Demo Mode is active, so this link was not looked up. Switch to Real API Mode to request actual Myntra data.");
         return;
       }
       const result = await lookupProduct({ url: search });
-      setCurrentProduct(result);
-      recordRecent(result);
-      navigate("product", result);
-      setToast({ tone: "success", message: "Latest price and available observations loaded from Rewalto." });
+      const product = saveLookupResult(result);
+      setToast({
+        tone: "success",
+        message: product.source === "scrapingdog"
+          ? "Latest Flipkart price loaded from Scrapingdog. One product check uses 5 credits."
+          : "Latest price and available observations loaded from Rewalto.",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product lookup failed.";
       setSearchError(message);
@@ -1124,6 +1143,39 @@ export default function App() {
 
   function recordRecent(product: Product) {
     setRecentProducts((items) => [product, ...items.filter((item) => item.id !== product.id)].slice(0, 10));
+  }
+
+  function saveLookupResult(result: Product): Product {
+    let product = result;
+    if (result.source === "scrapingdog") {
+      const savedVersions = [
+        ...tracked,
+        ...recentProducts,
+        ...(currentProduct ? [currentProduct] : []),
+      ].filter((item) => item.id === result.id && item.source === "scrapingdog");
+      const observations = new Map<string, PriceObservation>();
+      for (const saved of savedVersions) {
+        for (const observation of saved.observations) {
+          observations.set(String(observation.id), observation);
+        }
+      }
+      for (const observation of result.observations) {
+        observations.set(String(observation.id), observation);
+      }
+      product = {
+        ...result,
+        observations: [...observations.values()].sort(
+          (left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt),
+        ),
+      };
+      if (savedVersions.length > 0) {
+        setTracked((items) => items.map((item) => item.id === product.id ? product : item));
+      }
+    }
+    setCurrentProduct(product);
+    recordRecent(product);
+    navigate("product", product);
+    return product;
   }
 
   async function shareApp() {
@@ -1162,7 +1214,7 @@ export default function App() {
       <main className="main-shell">
         <Header screen={screen} mode={mode} onModeChange={() => changeMode(mode === "demo" ? "real" : "demo")} onMenuClick={() => setMobileOpen(true)} onShare={() => void shareApp()} />
         <div className="main-content">
-          {screen === "home" && <HomePage mode={mode} status={apiStatus} statusError={apiStatusError} isSearching={isSearching} error={searchError} onSearch={runSearch} onSelectProduct={selectProduct} onNavigate={(target) => navigate(target)} />}
+          {screen === "home" && <HomePage mode={mode} status={apiStatus} statusError={apiStatusError} isSearching={isSearching} error={searchError} onSearch={runSearch} onSelectProduct={selectProduct} onNavigate={(target) => navigate(target)} onModeChange={changeMode} />}
           {screen === "tracked" && <TrackedPage products={tracked} recentProducts={recentProducts} onSelectProduct={selectProduct} onRemove={(id) => { setTracked((items) => items.filter((item) => item.id !== id)); setToast({ tone: "success", message: "Product removed from your watchlist." }); }} onBrowse={() => navigate("home")} />}
           {screen === "product" && currentProduct && <ProductDetail product={currentProduct} onBack={() => navigate("home")} tracked={isCurrentTracked} onToggleTracked={() => toggleTracked(currentProduct)} range={range} onRangeChange={setRange} />}
           {screen === "product" && !currentProduct && <div className="empty-state panel"><h2>Product not found</h2><p>Open a product from your dashboard or start a new search.</p><button className="primary-button" type="button" onClick={() => navigate("home")}>Go to overview <ArrowRight size={15} /></button></div>}

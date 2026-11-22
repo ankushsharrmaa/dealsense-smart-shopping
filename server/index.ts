@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { existsSync, createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
+import { flipkartProductUrl, mapScrapingdogProduct } from "./flipkart.ts";
+import { skuFromMyntraUrl } from "./myntra.ts";
 
 if (existsSync(".env")) {
   process.loadEnvFile(".env");
@@ -9,6 +11,7 @@ if (existsSync(".env")) {
 
 const port = Number(process.env.PORT ?? 8787);
 const apiKey = process.env.REWALTO_API_KEY?.trim();
+const scrapingdogApiKey = process.env.SCRAPINGDOG_API_KEY?.trim();
 const apiBase = "https://api.rewalto.com";
 const distRoot = resolve("dist");
 const catalogPageSize = 20;
@@ -90,45 +93,6 @@ async function readJson(request: IncomingMessage): Promise<JsonRecord> {
   } catch {
     throw new HttpError(400, "Send a valid JSON request.");
   }
-}
-
-function skuFromUrl(rawUrl: string): { sku: string; url: URL } {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new HttpError(400, "Enter a complete product URL, including https://.");
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new HttpError(400, "The product link must use http or https.");
-  }
-
-  const host = url.hostname.toLowerCase();
-  if (host !== "myntra.com" && !host.endsWith(".myntra.com")) {
-    const retailer = host.includes("flipkart")
-      ? "Flipkart"
-      : host.includes("amazon")
-        ? "Amazon"
-        : host.includes("ajio")
-          ? "AJIO"
-          : host;
-    throw new HttpError(
-      422,
-      `${retailer} is not available in Rewalto's configured data source. Real price lookup currently supports Myntra only.`,
-    );
-  }
-
-  const querySku = url.searchParams.get("skuId") ?? url.searchParams.get("sku");
-  const pathSku = url.pathname.match(/(?:^|\/)(\d{6,})(?:\/|$)/)?.[1];
-  const slugSku = url.pathname.match(/-(\d{6,})(?:\/|$)/)?.[1];
-  const sku = querySku ?? pathSku ?? slugSku;
-  if (!sku || !/^[a-zA-Z0-9_-]{3,80}$/.test(sku)) {
-    throw new HttpError(
-      422,
-      "This Myntra URL does not contain a readable product ID. Rewalto's documented lookup uses an exact retailer SKU; try the product-ID search below.",
-    );
-  }
-  return { sku, url };
 }
 
 async function rewaltoGet<T>(path: string, query: URLSearchParams): Promise<T> {
@@ -229,6 +193,63 @@ async function lookupProduct(sku: string, sourceUrl: string | null): Promise<unk
   };
 }
 
+async function lookupFlipkartProduct(rawUrl: string): Promise<unknown> {
+  let parsed: ReturnType<typeof flipkartProductUrl>;
+  try {
+    parsed = flipkartProductUrl(rawUrl);
+  } catch (error) {
+    throw new HttpError(422, error instanceof Error ? error.message : "The Flipkart product URL could not be read.");
+  }
+  if (!scrapingdogApiKey) {
+    throw new HttpError(
+      503,
+      "Flipkart real lookup is not configured. Add SCRAPINGDOG_API_KEY to the server environment.",
+    );
+  }
+
+  const query = new URLSearchParams({
+    api_key: scrapingdogApiKey,
+    url: parsed.url.toString(),
+  });
+  let response: Response;
+  try {
+    response = await fetch(`https://api.scrapingdog.com/flipkart/product?${query.toString()}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(30_000),
+      redirect: "error",
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new HttpError(504, "Scrapingdog did not respond in time. Please try again later.");
+    }
+    throw new HttpError(502, "Could not connect to Scrapingdog. Please try again later.");
+  }
+
+  if (!response.ok) {
+    const guidance = response.status === 401 || response.status === 403
+      ? " Check that the Scrapingdog key is valid and has API credits."
+      : response.status === 429
+        ? " The Scrapingdog account may have reached its request limit."
+        : "";
+    throw new HttpError(
+      response.status >= 400 && response.status < 500 ? response.status : 502,
+      `Scrapingdog request failed (HTTP ${response.status}).${guidance}`,
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new HttpError(502, "Scrapingdog returned an unreadable response.");
+  }
+  try {
+    return mapScrapingdogProduct(payload, parsed.url.toString());
+  } catch (error) {
+    throw new HttpError(502, error instanceof Error ? error.message : "Scrapingdog returned an unexpected product response.");
+  }
+}
+
 async function listProducts(cursor: string | null): Promise<unknown> {
   const query = new URLSearchParams({
     retailer: "myntra",
@@ -313,7 +334,9 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, {
         configured: Boolean(apiKey),
         provider: "Rewalto",
-        supportedRetailers: ["myntra"],
+        rewaltoConfigured: Boolean(apiKey),
+        scrapingdogConfigured: Boolean(scrapingdogApiKey),
+        supportedRetailers: ["myntra", "flipkart"],
       });
       return;
     }
@@ -330,11 +353,28 @@ const server = createServer(async (request, response) => {
       const rawUrl = typeof body.url === "string" ? body.url.trim() : "";
       const requestedSku =
         typeof body.retailerSku === "string" ? body.retailerSku.trim() : "";
+      if (rawUrl) {
+        let host: string;
+        try {
+          host = new URL(rawUrl).hostname.toLowerCase();
+        } catch {
+          throw new HttpError(422, "Enter a complete product URL, including https://.");
+        }
+        if (host === "flipkart.com" || host.endsWith(".flipkart.com")) {
+          sendJson(response, 200, await lookupFlipkartProduct(rawUrl));
+          return;
+        }
+      }
       let sku = requestedSku;
       let sourceUrl: string | null = null;
 
       if (rawUrl) {
-        const parsed = skuFromUrl(rawUrl);
+        let parsed: ReturnType<typeof skuFromMyntraUrl>;
+        try {
+          parsed = skuFromMyntraUrl(rawUrl);
+        } catch (error) {
+          throw new HttpError(422, error instanceof Error ? error.message : "The Myntra URL could not be read.");
+        }
         sku = parsed.sku;
         sourceUrl = parsed.url.toString();
       } else if (!/^[a-zA-Z0-9_-]{3,80}$/.test(sku)) {
